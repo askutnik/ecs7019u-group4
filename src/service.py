@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any,Dict,Optional
 import pandas as pd
 from src.config import PROCESSED_DIR
-from src.recommendations import get_cluster_recommendation
+from src.recommendations_old import get_cluster_recommendation
 
 @dataclass
 class PostcodeResult:
