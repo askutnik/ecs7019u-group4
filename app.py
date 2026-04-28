@@ -1,24 +1,19 @@
 from __future__ import annotations
 import pandas as pd
 import streamlit as st
-from src.recommendations import get_cluster_recommendation
 import os
-import subprocess
-import sys
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+import json
+
+# Ensure this import points to your corrected src/recommendations.py
+from src.recommendations import get_ai_recommendation
 
 st.set_page_config(
     page_title="UK Demographic Marketing Dashboard",
     layout="wide",
 )
-
-FEATURE_COLS = [
-    "imd", "pct_econ_active", "pct_econ_inactive", "pct_retired",
-    "pct_students", "pct_home_family", "pct_long_term_sick",
-    "pct_unemployed", "pct_self_employed",
-]
 
 CLUSTER_COLOURS = {
     0: "#E63946",
@@ -27,86 +22,47 @@ CLUSTER_COLOURS = {
     3: "#4361EE",
 }
 
-
 @st.cache_data
 def load_artifacts():
-    usecols = ["pcds", "oa21", "lat", "long", "imd", "cluster"]
-    dtype = {
-        "pcds": "string", "oa21": "string", "cluster": "int16",
-        "lat": "float32", "long": "float32", "imd": "float32",
-    }
-    lookup = pd.read_csv("processed/postcode_lookup.csv.gz", usecols=usecols, dtype=dtype)
-    lookup["pcds"] = lookup["pcds"].astype(str).str.strip().str.upper()
+    # Keep your existing lookup/profiles/sizes logic, but ensure ALL are here:
+    lookup = pd.read_csv("processed/postcode_lookup.csv.gz")
     profiles_mean = pd.read_csv("processed/cluster_profiles_mean.csv")
     profiles_delta = pd.read_csv("processed/cluster_profiles_delta_vs_global.csv")
     sizes = pd.read_csv("processed/cluster_sizes.csv")
-    for df in (profiles_mean, profiles_delta, sizes):
-        df["cluster"] = df["cluster"].astype(int)
+    
+    # Must include all three keys for the model comparison tab
     umaps = {
         "KMeans": pd.read_csv("processed/kmeans_umap.csv"),
         "GMM": pd.read_csv("processed/gmm_umap.csv"),
         "Hybrid": pd.read_csv("processed/hybrid_umap.csv")
     }
-    return lookup, profiles_mean, profiles_delta, sizes, umaps
+    return lookup, profiles_mean,  sizes, umaps
 
-
-#  Load hybrid output for confidence scores 
 @st.cache_data
 def load_hybrid_output():
     try:
-        hybrid = pd.read_csv(
-            "processed/advanced_hybrid_output.csv",
-            usecols=["oa21", "confidence", "entropy", "is_ambiguous"],
-        )
-        return hybrid
+        return pd.read_csv("processed/advanced_hybrid_output.csv")
     except FileNotFoundError:
         return None
-
 
 def normalise_postcode(pc: str) -> str:
     return str(pc).strip().upper()
 
-
-def top_deltas(delta_row: pd.Series, n: int = 3):
-    deltas = delta_row.drop(labels=["cluster"])
-    deltas = deltas.reindex(deltas.abs().sort_values(ascending=False).index)
-    return deltas.head(n)
-
+st.title("UK Demographic Marketing Dashboard")
+lookup, profiles_mean, sizes, umaps = load_artifacts()
+hybrid_output = load_hybrid_output()
 
 def cluster_label(cid: int) -> str:
-    try:
-        r = get_cluster_recommendation(cid)
-        return f"Cluster {cid} — {r.get('cluster_name', '')}"
-    except Exception:
-        return f"Cluster {cid}"
-
-
-#  Page header
-st.title("UK Demographic Marketing Dashboard")
-st.caption("Enter a UK postcode to view its demographic cluster, summary profile and transparent marketing recommendations.")
-
-lookup, profiles_mean, profiles_delta, sizes, umaps = load_artifacts()
-
-# Load hybrid confidence data
-hybrid_output = load_hybrid_output()
+    return f"Cluster {cid}"
 
 CLUSTER_LABELS = {cid: cluster_label(cid) for cid in range(4)}
 
-#  Sidebar (outside tabs so it's always visible)
 with st.sidebar:
     st.header("Lookup")
     postcode = st.text_input("Postcode (e.g., E1 4PD)", value="")
-    st.markdown("---")
-    st.subheader("About")
-    st.write(
-        "Clusters are learned using K-means on public UK demographic indicators (Census + ONSPD). "
-        "Recommendations are rule-based for interpretability."
-    )
 
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🗺️ Cluster Map", "📈 Model Comparison"])
 
-
-# TAB 1 — Dashboard
 with tab1:
     if not postcode:
         st.info("Enter a postcode in the sidebar to begin.")
@@ -114,149 +70,100 @@ with tab1:
 
     pc = normalise_postcode(postcode)
     matches = lookup[lookup["pcds"] == pc]
-
     if matches.empty:
-        st.error(
-            f"Postcode **{pc}** not found in the lookup table. "
-            "Check formatting (include a space if applicable, e.g. 'E1 4PD')."
-        )
+        st.error("Postcode not found.")
         st.stop()
-
     row = matches.iloc[0]
-    cluster_id = int(row["cluster"])
-    rec = get_cluster_recommendation(cluster_id)
-
-    mean_row = profiles_mean[profiles_mean["cluster"] == cluster_id]
-    delta_row = profiles_delta[profiles_delta["cluster"] == cluster_id]
-    size_row = sizes[sizes["cluster"] == cluster_id]
-
-    if mean_row.empty or delta_row.empty or size_row.empty:
-        st.warning("Cluster profile tables are missing this cluster ID.")
-        st.stop()
-
-    mean_row = mean_row.iloc[0]
-    delta_row = delta_row.iloc[0]
-    oa_count = int(size_row.iloc[0]["oa_count"])
-
-    colA, colB = st.columns([1.2, 1])
-
+    colA, colB = st.columns([1.5, 1])
     with colA:
-        st.subheader(" Postcode result")
-        st.markdown(
-            f"**{pc}** falls within Output Area `{row['oa21']}`, "
-            f"assigned to **Cluster {cluster_id} — {rec.get('cluster_name', '')}**. "
-            f"The area has an IMD score of **{float(row['imd']):.1f}**."
-        )
-        st.caption(
-            "The IMD measure is included as an area-level index; all other indicators "
-            "are percentages derived from Census 2021 economic activity categories."
-        )
-
-        # Confidence Score display 
-        # Pulls confidence and ambiguity from the hybrid model output.
-        # Shows the business user how certain the model is about this postcode.
+        st.subheader("Marketing Strategy")
+        
         if hybrid_output is not None:
-            oa_code = str(row["oa21"])
-            hybrid_row = hybrid_output[hybrid_output["oa21"] == oa_code]
+            oa_code = str(row['oa21'])
+            hybrid_row = hybrid_output[hybrid_output['oa21'] == oa_code]
+            
             if not hybrid_row.empty:
-                conf = float(hybrid_row.iloc[0]["confidence"])
-                is_amb = bool(hybrid_row.iloc[0]["is_ambiguous"])
-                ent = float(hybrid_row.iloc[0]["entropy"])
+                cluster_a = int(hybrid_row.iloc[0]['final_cluster'])
+                cluster_b = int(hybrid_row.iloc[0]['kmeans_cluster'])
+                if cluster_a == cluster_b:
+                    cluster_b = (cluster_a + 1) % 4
 
-                conf_col1, conf_col2 = st.columns(2)
-                conf_col1.metric(
-                    label="Cluster Confidence",
-                    value=f"{conf:.0%}",
-                    help="Probability this postcode belongs to this cluster (from Hybrid GMM)."
-                )
-                conf_col2.metric(
-                    label="Assignment Entropy",
-                    value=f"{ent:.3f}",
-                    help="Low entropy = clear assignment. High entropy = sits between clusters."
-                )
+                stats_a = profiles_mean[profiles_mean['cluster'] == cluster_a].iloc[0].to_dict()
+                stats_b = profiles_mean[profiles_mean['cluster'] == cluster_b].iloc[0].to_dict()
 
-                if is_amb:
-                    st.warning(
-                        "⚠️ **Boundary postcode:** This area sits near the edge of its cluster. "
-                        "Marketing strategies from adjacent clusters may also apply. "
-                        f"Model confidence: {conf:.0%}."
-                    )
-                else:
-                    st.success(f" **Clear assignment** — confidence {conf:.0%}.")
-        # ── [END ADDITION] ────────────────────────────────────────────────────
+                rec_a = get_ai_recommendation(cluster_a, stats_a)
+                rec_b = get_ai_recommendation(cluster_b, stats_b)
 
-        st.markdown("---")
+                # Persist for colB
+                st.session_state['stats_a'] = stats_a
+                st.session_state['cluster_a'] = cluster_a
+                st.session_state['rec_a'] = rec_a
 
-        st.subheader(" Marketing recommendation")
-        st.markdown(f"#### {rec['cluster_name']}")
-        st.markdown(f"**Who to target:** {rec['target_profile']}")
+                # Polished Strategy View
+                strat_tabs = st.tabs(["🎯 Primary Strategy", "🔄 Alternative Strategy"])
+                
+                with strat_tabs[0]:
+                    st.metric(label="Primary Cluster", value=rec_a.get('cluster_name', f"Cluster {cluster_a}"))
+                    st.markdown(f"**Target Audience:** :blue[{rec_a.get('target_profile')}]")
+                    st.info(f"**Rationale:** {rec_a.get('rationale')}")
+                    
+                    st.markdown("### 📢 Recommended Channels")
 
-        st.markdown("**Recommended channels**")
-        channels = rec["recommended_channels"]
-        if isinstance(channels, list):
-            for ch in channels:
-                st.markdown(f"- {ch}")
+                    channels = rec_a.get('recommended_channels', [])
+
+# Create a 2-column grid layout
+                    cols = st.columns(2)
+                    icon_map = {
+    "Email": "📧", 
+    "Social Media": "📱", 
+    "Direct Mail": "📮", 
+    "SMS": "💬", 
+    "Display Ads": "🖼️",
+    "University": "🏫",
+    "On-campus": "📢",
+    "Streaming": "📺",
+    "Partnerships": "🤝"
+}
+                for i, ch in enumerate(channels):
+                    with cols[i % 2]:
+                        icon = next((icon_map[key] for key in icon_map if key in ch), "📢")
+                        with st.container(border=True):
+                            st.markdown(f"**{icon} {ch}**", help=f"High impact channel for {rec_a.get('cluster_name')}")
+
+                with strat_tabs[1]:
+                    st.metric(label="Alternative Cluster", value=rec_b.get('cluster_name', f"Cluster {cluster_b}"))
+                    st.markdown(f"**Target Audience:** :orange[{rec_b.get('target_profile')}]")
+                    st.caption(f"**Rationale:** {rec_b.get('rationale')}")
+            else:
+                st.warning("Hybrid model data not found for this OA.")
         else:
-            st.markdown(channels)
-
-        st.markdown("**Messaging strategy**")
-        strategy = rec["messaging_strategy"]
-        if isinstance(strategy, list):
-            for point in strategy:
-                st.markdown(f"- {point}")
-        else:
-            paragraphs = [p.strip() for p in str(strategy).split("\n") if p.strip()]
-            for para in paragraphs:
-                st.markdown(para)
-
-        with st.expander("💡 Rationale"):
-            st.markdown(rec["rationale"])
+            st.error("Hybrid model output file missing.")
 
     with colB:
-        st.subheader("Cluster context")
-        st.markdown(f"This cluster contains **{oa_count:,}** Output Areas across the UK.")
-        st.markdown("---")
-
-        st.markdown("**Top distinguishing features (vs UK average):**")
-        top = top_deltas(delta_row, n=5)
-        top_df = (
-            top.rename("delta_vs_global")
-            .to_frame()
-            .reset_index()
-            .rename(columns={"index": "feature"})
-        )
-        st.dataframe(top_df, use_container_width=True)
-
-        st.subheader("Average profile (cluster means)")
-        PCT_FEATURES = [
-            "pct_econ_active", "pct_econ_inactive", "pct_retired",
-            "pct_students", "pct_home_family", "pct_long_term_sick",
-            "pct_unemployed", "pct_self_employed",
-        ]
-        profile_df = (
-            mean_row[PCT_FEATURES]
-            .rename("cluster_mean")
-            .to_frame()
-            .reset_index()
-            .rename(columns={"index": "feature"})
-        )
-        st.bar_chart(profile_df.set_index("feature"))
-
-        imd_percentile = (mean_row["imd"] / 32844) * 100
-        st.metric("Deprivation percentile", f"{imd_percentile:.1f}%")
-    st.markdown("**What defines this area:**")
-    st.caption("The demographic factors that most strongly distinguish this cluster from the UK average.")
-
-    # Logic fix: Use delta_row (specific to this cluster) instead of global importance
-    # delta_row is already defined earlier in Tab 1 based on the postcode's cluster
-    top_defining_features = top_deltas(delta_row, n=4) 
-
-    for feature, delta_val in top_defining_features.items():
-        # Show how much higher/lower this feature is than average
-        label = feature.replace("pct_", "% ").replace("_", " ").title()
-        # Normalize the delta for the progress bar (e.g., 0 to 1 scale)
-        bar_val = min(abs(delta_val) / 50, 1.0) # Assuming max delta is around 50%
-        st.progress(bar_val, text=f"{label}: {'+' if delta_val > 0 else ''}{delta_val:.1f}% vs UK Avg")
+        st.subheader("📊 Demographic Profile")
+        if 'stats_a' in st.session_state:
+            stats_a = st.session_state['stats_a']
+            cluster_a = st.session_state['cluster_a']
+            rec_a = st.session_state['rec_a']
+            
+            plot_data = {k: v for k, v in stats_a.items() if k != 'cluster'}
+            df_plot = pd.DataFrame(list(plot_data.items()), columns=['Feature', 'Value'])
+            
+            # Polished Bar Chart
+            fig = px.bar(
+                df_plot, x='Value', y='Feature', orientation='h',
+                template="plotly_white",
+                title=f"Avg Demographics: {rec_a.get('cluster_name')}",
+                color_discrete_sequence=[CLUSTER_COLOURS.get(cluster_a, "#4361EE")]
+            )
+            fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+            
+            with st.expander("View raw demographic stats"):
+                st.dataframe(df_plot.style.format({"Value": "{:.2f}"}), use_container_width=True)
+        else:
+            st.info("Select a postcode to view cluster context.")
+# ... (Include your existing tab2 and tab3 code here)
     
 # TAB 2 — Cluster Map
 with tab2:
