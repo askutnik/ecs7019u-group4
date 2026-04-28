@@ -1,0 +1,10 @@
+feature,importance,model
+pct_long_term_sick,0.23207875145333362,GMM
+imd,0.16186544521576798,GMM
+pct_students,0.1424197418340302,GMM
+pct_unemployed,0.10951197242173404,GMM
+pct_home_family,0.1063835858832367,GMM
+pct_retired,0.10456789161657096,GMM
+pct_econ_active,0.06915619753781282,GMM
+pct_econ_inactive,0.04553623298520877,GMM
+pct_self_employed,0.028480181052304942,GMM

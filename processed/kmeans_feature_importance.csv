@@ -1,0 +1,10 @@
+feature,importance,model
+pct_retired,0.26082223150564776,KMeans
+pct_econ_active,0.19827800604168533,KMeans
+pct_econ_inactive,0.13831880159441393,KMeans
+imd,0.1236276570242899,KMeans
+pct_long_term_sick,0.09030079757231166,KMeans
+pct_home_family,0.05914349412283387,KMeans
+pct_unemployed,0.05815847545282037,KMeans
+pct_self_employed,0.04282727404719607,KMeans
+pct_students,0.02852326263880101,KMeans
