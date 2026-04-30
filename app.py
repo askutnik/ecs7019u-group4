@@ -10,7 +10,7 @@ from fpdf import FPDF
 import base64
 
 # Ensure this import points to your corrected src/recommendations.py
-from src.recommendations import get_ai_recommendation
+from src.recommendations import get_ai_recommendation,get_ai_recommendation_hybrid
 from src.recommendations_old import get_cluster_recommendation
 
 st.set_page_config(
@@ -54,7 +54,7 @@ def load_kmeans_output():
 @st.cache_data
 def load_hybrid_output():
     try:
-        return pd.read_csv("processed/advanced_hybrid_output.csv")
+        return pd.read_csv("notebooks/processed/advanced_hybrid_output.csv")
     except FileNotFoundError:
         return None
 
@@ -82,163 +82,179 @@ CLUSTER_LABELS = {cid: cluster_label(cid) for cid in range(4)}
 with st.sidebar:
     st.header("Lookup")
     postcode = st.text_input("Postcode (e.g., E1 4PD)", value="")
+    st.header("Product decsription")
+    product_desc=st.text_area(
+        "Describe your product or service",
+        placeholder="e.g. A budgeting app for young professionals struggling with saving money",
+        height=120
+    )
+
 
 tab1, tab2 = st.tabs([" Dashboard", "Cluster Map"])
 
 with tab1:
+
     if not postcode:
-        st.info("Enter a postcode in the sidebar to begin.")
+        st.warning("Enter a postcode in the sidebar to begin.")
+        st.stop()
+    if not product_desc:
+        st.warning("Please enter a product description to generate tailored marketing strategies.")
         st.stop()
 
     pc = normalise_postcode(postcode)
     matches = lookup[lookup["pcds"] == pc]
-    if matches.empty:
-        st.error("Postcode not found.")
-        st.stop()
-    row = matches.iloc[0]
-    colA, colB = st.columns([1.5, 1])
-    with colA:
-        st.subheader("Marketing Strategy")
-        
-        if hybrid_output is not None:
-            oa_code = str(row['oa21'])
-            hybrid_row = hybrid_output[hybrid_output['oa21'] == oa_code]
-            
-            if not hybrid_row.empty:
-                cluster_a = int(hybrid_row.iloc[0]['final_cluster'])
-                cluster_b = int(hybrid_row.iloc[0]['kmeans_cluster'])
-                if cluster_a == cluster_b:
-                    cluster_b = (cluster_a + 1) % 4
 
-                stats_a = profiles_mean[profiles_mean['cluster'] == cluster_a].iloc[0].to_dict()
-                stats_b = profiles_mean[profiles_mean['cluster'] == cluster_b].iloc[0].to_dict()
-
-                rec_a = get_ai_recommendation(cluster_a, stats_a)
-                rec_b = get_ai_recommendation(cluster_b, stats_b)
-
-                # Persist for colB
-                st.session_state['stats_a'] = stats_a
-                st.session_state['cluster_a'] = cluster_a
-                st.session_state['rec_a'] = rec_a
-
-                # Polished Strategy View
-                strat_tabs = st.tabs([" Primary Strategy", " Alternative Strategy"])
-                
-                with strat_tabs[0]:
-                    st.metric(label="Primary Cluster", value=rec_a.get('cluster_name', f"Cluster {cluster_a}"))
-                    st.markdown(f"**Target Audience:** :blue[{rec_a.get('target_profile')}]")
-                    st.info(f"**Rationale:** {rec_a.get('rationale')}")
-                    
-                    st.markdown("###  Recommended Channels")
-
-                    channels = rec_a.get('recommended_channels', [])
-
-# Create a 2-column grid layout
-                    cols = st.columns(2)
-                    icon_map = {
-    "Email": "📧", 
-    "Social Media": "📱", 
-    "Direct Mail": "📮", 
-    "SMS": "💬", 
-    "Display Ads": "🖼️",
-    "University": "🏫",
-    "On-campus": "📢",
-    "Streaming": "📺",
-    "Partnerships": "🤝"
-}
-                for i, ch in enumerate(channels):
-                    with cols[i % 2]:
-                        icon = next((icon_map[key] for key in icon_map if key in ch), "📢")
-                        with st.container(border=True):
-                            st.markdown(f"**{icon} {ch}**", help=f"High impact channel for {rec_a.get('cluster_name')}")
-
-                with strat_tabs[1]:
-                    st.metric(label="Alternative Cluster", value=rec_b.get('cluster_name', f"Cluster {cluster_b}"))
-                    st.markdown(f"**Target Audience:** :orange[{rec_b.get('target_profile')}]")
-                    st.caption(f"**Rationale:** {rec_b.get('rationale')}")
-            else:
-                st.warning("Hybrid model data not found for this OA.")
-        else:
-            st.error("Hybrid model output file missing.")
-   
-
-    def create_download_link(val, filename):
-        b64 = base64.b64encode(val)
-        return f'<a href="data:application/octet-stream;base64,{b64.decode()}" download="{filename}.pdf">Download Marketing Strategy (PDF)</a>'
-
-    # Inside Tab 1, under the recommendation section:
-    if st.button("Generate PDF Report"):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(40, 10, f"Marketing Strategy: {pc}")
-        
-        pdf.set_font("Arial", "", 12)
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, f"Cluster: {rec['cluster_name']}")
-        pdf.multi_cell(0, 10, f"Target Profile: {rec['target_profile']}")
-        
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(40, 10, "Recommended Channels:")
-        pdf.set_font("Arial", "", 12)
-        pdf.ln(10)
-        for ch in rec["recommended_channels"]:
-            pdf.cell(0, 10, f"- {ch}", ln=True)
-            
-        pdf_output = pdf.output(dest="S").encode("latin-1")
-        html = create_download_link(pdf_output, f"Strategy_{pc}")
-        st.markdown(html, unsafe_allow_html=True)
-
-    # with colB:
-    #     st.subheader("📊 Demographic Profile")
-    #     if 'stats_a' in st.session_state:
-    #         stats_a = st.session_state['stats_a']
-    #         cluster_a = st.session_state['cluster_a']
-    #         rec_a = st.session_state['rec_a']
-            
-    #         plot_data = {k: v for k, v in stats_a.items() if k != 'cluster'}
-    #         df_plot = pd.DataFrame(list(plot_data.items()), columns=['Feature', 'Value'])
-            
-    #         # Polished Bar Chart
-    #         fig = px.bar(
-    #             df_plot, x='Value', y='Feature', orientation='h',
-    #             template="plotly_white",
-    #             title=f"Avg Demographics: {rec_a.get('cluster_name')}",
-    #             color_discrete_sequence=[CLUSTER_COLOURS.get(cluster_a, "#4361EE")]
-    #         )
-    #         fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=40, b=0))
-    #         st.plotly_chart(fig, use_container_width=True)
-            
-    #         with st.expander("View raw demographic stats"):
-    #             st.dataframe(df_plot.style.format({"Value": "{:.2f}"}), use_container_width=True)
-    #     else:
-    #         st.info("Select a postcode to view cluster context.")
-
-    if not postcode:
-        st.info("Enter a postcode in the sidebar to begin.")
-        st.stop()
-
-    pc = normalise_postcode(postcode)
-    matches = lookup[lookup["pcds"] == pc]
+    st.markdown("### Campaign Context")
+    st.info(
+    f"**Product / Service Description**\n\n"
+    f"{product_desc}"
+)
 
     if matches.empty:
         st.error(
-            f"Postcode **{pc}** not found in the lookup table. "
+            f"Postcode *{pc}* not found in the lookup table. "
             "Check formatting (include a space if applicable, e.g. 'E1 4PD')."
         )
         st.stop()
 
     row = matches.iloc[0]
-    cluster_id = int(row["cluster"])
-    rec = get_cluster_recommendation(cluster_id)
+    cluster_id = int(row["cluster"])      # KMeans cluster from lookup
+    oa_code = str(row["oa21"])
 
-    mean_row = profiles_mean[profiles_mean["cluster"] == cluster_id]
+    # ── Resolve hybrid row ────────────────────────────────────────────────────
+    hybrid_row = None
+    if hybrid_output is not None:
+        _hr = hybrid_output[hybrid_output["oa21"] == oa_code]
+        if not _hr.empty:
+            hybrid_row = _hr.iloc[0]
+
+    # ── Probability columns ───────────────────────────────────────────────────
+    PROB_COLS = ["prob_0", "prob_1", "prob_2", "prob_3"]
+    has_probs = (
+        hybrid_row is not None
+        and all(c in hybrid_output.columns for c in PROB_COLS)
+    )
+
+    # ── KMeans cluster stats (for Strategy 1) ────────────────────────────────
+    kmeans_stats = profiles_mean[profiles_mean["cluster"] == cluster_id].iloc[0].to_dict()
+
+    # ── Hybrid blend data (for Strategy 2) ───────────────────────────────────
+    if has_probs:
+        raw_probs = [float(hybrid_row[c]) for c in PROB_COLS]
+        # Keep only clusters with >5% weight to avoid noise
+        cluster_probs = [(i, p) for i, p in enumerate(raw_probs) if p >= 0.02]
+        # Renormalise so weights sum to 1
+        total_w = sum(p for _, p in cluster_probs)
+        cluster_probs = [(cid, p / total_w) for cid, p in cluster_probs]
+        cluster_stats_map = {
+            cid: profiles_mean[profiles_mean["cluster"] == cid].iloc[0].to_dict()
+            for cid, _ in cluster_probs
+        }
+    else:
+        cluster_probs = [(cluster_id, 1.0)]
+        cluster_stats_map = {cluster_id: kmeans_stats}
+
+    # ── Generate both AI strategies ───────────────────────────────────────────
+    rec_kmeans = get_ai_recommendation(cluster_id, kmeans_stats,product_desc)
+    rec_hybrid = get_ai_recommendation_hybrid(cluster_probs, cluster_stats_map,product_desc,CLUSTER_LABELS)
+
+    # ── Terminal debug prints ─────────────────────────────────────────────────
+    kmeans_label = get_cluster_recommendation(cluster_id).get("cluster_name", f"Cluster {cluster_id}")
+    print(f"\n{'='*60}")
+    print(f"POSTCODE: {pc}  |  OA: {oa_code}")
+    print(f"{'='*60}")
+    print(f"[KMeans] Predicted cluster: Cluster {cluster_id} — {kmeans_label}")
+
+    print(f"\n[Hybrid] Cluster distribution:")
+    if has_probs:
+        for cid, prob in sorted(enumerate(raw_probs), key=lambda x: x[1], reverse=True):
+            if prob < 0.01:
+                continue
+            cname = get_cluster_recommendation(cid).get("cluster_name", f"Cluster {cid}")
+            print(f"  Cluster {cid} — {cname}: {prob * 100:.0f}%")
+    else:
+        print("  (no hybrid probabilities available)")
+    print(f"{'='*60}\n")
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # AI Marketing Strategies — full width, two sub-tabs
+    # ═════════════════════════════════════════════════════════════════════════
+    st.subheader("Marketing Strategies")
+
+    icon_map = {
+        "Email": "📧", "LinkedIn": "💼", "TikTok": "🎵",
+        "Instagram": "📸", "Facebook": "👥", "Google": "🔍",
+        "SMS": "💬", "Mail": "📮", "Community": "🏘️",
+        "University": "🏫", "Streaming": "📺", "Search": "🔍",
+        "Newspaper": "📰", "Event": "🎪", "Podcast": "🎙️",
+    }
+
+    strat_tabs = st.tabs([f"📍 Strategy 1 — {kmeans_label}", "🔀 Strategy 2 — Hybrid Blend"])
+
+    # ── Strategy 1: KMeans prediction ────────────────────────────────────────
+    with strat_tabs[0]:
+        st.caption(
+            f"Based on the *KMeans* predicted cluster for this postcode: "
+            f"*Cluster {cluster_id} — {kmeans_label}*."
+        )
+        st.metric("Cluster", kmeans_label)
+        st.markdown(f"*Target Audience:* {rec_kmeans.get('target_profile', '—')}")
+
+        #with st.expander("💡 Rationale", expanded=False):
+        st.markdown(rec_kmeans.get("rationale", "—"))
+
+        st.markdown("##### 📡 Recommended Channels")
+        channels_k = rec_kmeans.get("recommended_channels", [])
+        cols_k = st.columns(2)
+        for i, ch in enumerate(channels_k):
+            icon = next((v for k, v in icon_map.items() if k.lower() in ch.lower()), "📢")
+            with cols_k[i % 2]:
+                with st.container(border=True):
+                    st.markdown(f"*{icon} {ch}*")
+
+        st.markdown("##### ✉️ Messaging Strategy")
+        for point in rec_kmeans.get("messaging_strategy", []):
+            st.markdown(f"- {point}")
+
+    # ── Strategy 2: Hybrid blend ──────────────────────────────────────────────
+    with strat_tabs[1]:
+        if has_probs:
+            mix_str = ", ".join(
+                f"*{p * 100:.0f}% Cluster {cid}*" for cid, p in cluster_probs
+            )
+            st.caption(f"Based on the *Hybrid* probabilistic blend: {mix_str}.")
+        else:
+            st.caption("Hybrid probabilities unavailable — falling back to KMeans cluster.")
+        
+        # Get dominant hybrid cluster
+        top_cluster = max(cluster_probs, key=lambda x: x[1])[0]
+        hybrid_label = get_cluster_recommendation(top_cluster).get(
+    "cluster_name", f"Cluster {top_cluster}")
+
+        st.metric("Blended Profile", hybrid_label,top_cluster)
+        st.markdown(f"*Target Audience:* {rec_hybrid.get('target_profile', '—')}")
+
+        #with st.expander(" Rationale", expanded=False):
+        st.markdown(rec_hybrid.get("rationale", "—"))
+
+        st.markdown("##### Recommended Channels")
+        channels_h = rec_hybrid.get("recommended_channels", [])
+        cols_h = st.columns(2)
+        for i, ch in enumerate(channels_h):
+            icon = next((v for k, v in icon_map.items() if k.lower() in ch.lower()), "📢")
+            with cols_h[i % 2]:
+                with st.container(border=True):
+                    st.markdown(f"*{icon} {ch}*")
+
+        st.markdown("#####  Messaging Strategy")
+        for point in rec_hybrid.get("messaging_strategy", []):
+            st.markdown(f"- {point}")
+
+    # ── Key local insights ────────────────────────────────────────────────────
     st.divider()
+    mean_row = profiles_mean[profiles_mean["cluster"] == cluster_id].iloc[0]
     delta_row = profiles_delta[profiles_delta["cluster"] == cluster_id].iloc[0]
-    top_defining_features = top_deltas(delta_row, n=4)
 
-    # Define a mapping for business clarity
     BUSINESS_LABELS = {
         "pct_retired": "Retiree Population",
         "pct_students": "Student Density",
@@ -246,28 +262,20 @@ with tab1:
         "pct_long_term_sick": "Health-Stressed Households",
         "pct_home_family": "Families with Children",
         "pct_unemployed": "Job Seekers",
-        "imd": "Economic Deprivation"
+        "imd": "Economic Deprivation",
     }
 
-    st.write("###  Key Local Insights")
+    st.markdown("###  Key Local Insights")
     st.caption("How this specific area differs from the national average.")
 
     top_defining_features = top_deltas(delta_row, n=4)
-
     for feature, delta_val in top_defining_features.items():
-        # Get the friendly name or fall back to a titled version of the column
-        friendly_name = BUSINESS_LABELS.get(feature, feature.replace("pct_", "").replace("_", " ").title())
-        
-        # Create a dynamic interpretation string
+        friendly = BUSINESS_LABELS.get(feature, feature.replace("pct_", "").replace("_", " ").title())
         direction = "Higher" if delta_val > 0 else "Lower"
         strength = "Significantly " if abs(delta_val) > 15 else ""
-        
-        # Display as a clean metric or descriptive text
-        st.markdown(f"**{friendly_name}** is **{strength}{direction}** than average.")
-        
-        # Visualise with a progress bar (normalised to a 0-1 scale)
+        st.markdown(f"*{friendly}* is *{strength}{direction}* than average.")
         bar_val = min(abs(delta_val) / 50, 1.0)
-        st.progress(bar_val, text=f"{friendly_name}: {delta_val:+.1f}% variance")
+        st.progress(bar_val, text=f"{friendly}: {delta_val:+.1f}% variance")
 
 # TAB 2 — Cluster Map
 with tab2:
