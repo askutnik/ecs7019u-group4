@@ -9,7 +9,7 @@ import json
 from fpdf import FPDF
 import base64
 
-# Ensure this import points to your corrected src/recommendations.py
+
 from src.recommendations import get_ai_recommendation,get_ai_recommendation_hybrid
 from src.recommendations_old import get_cluster_recommendation
 
@@ -27,19 +27,15 @@ CLUSTER_COLOURS = {
 
 @st.cache_data
 def load_artifacts():
-    # Keep your existing lookup/profiles/sizes logic, but ensure ALL are here:
+    #load all the lookup csv files
     lookup = pd.read_csv("processed/postcode_lookup.csv.gz")
     profiles_mean = pd.read_csv("processed/cluster_profiles_mean.csv")
     profiles_delta = pd.read_csv("processed/cluster_profiles_delta_vs_global.csv")
     sizes = pd.read_csv("processed/cluster_sizes.csv")
     
-    # Must include all three keys for the model comparison tab
-    umaps = {
-        "KMeans": pd.read_csv("processed/kmeans_umap.csv"),
-        "GMM": pd.read_csv("processed/gmm_umap.csv"),
-        "Hybrid": pd.read_csv("processed/hybrid_umap.csv")
-    }
-    return lookup, profiles_mean,profiles_delta, sizes, umaps
+   
+    
+    return lookup, profiles_mean,profiles_delta, sizes
 @st.cache_data
 def load_kmeans_output():
     try:
@@ -66,7 +62,7 @@ def top_deltas(delta_row: pd.Series, n: int = 3):
     return deltas.head(n)
 
 st.title("UK Demographic Marketing Dashboard")
-lookup, profiles_mean,profiles_delta, sizes, umaps= load_artifacts()
+lookup, profiles_mean,profiles_delta, sizes= load_artifacts()
 hybrid_output = load_hybrid_output()
 kmeans_output = load_kmeans_output()
 
@@ -118,27 +114,27 @@ with tab1:
         st.stop()
 
     row = matches.iloc[0]
-    cluster_id = int(row["cluster"])      # KMeans cluster from lookup
+    cluster_id = int(row["cluster"])# KMeans cluster from lookup
     oa_code = str(row["oa21"])
 
-    # ── Resolve hybrid row ────────────────────────────────────────────────────
+    #resolve the hybrid tab
     hybrid_row = None
     if hybrid_output is not None:
         _hr = hybrid_output[hybrid_output["oa21"] == oa_code]
         if not _hr.empty:
             hybrid_row = _hr.iloc[0]
 
-    # ── Probability columns ───────────────────────────────────────────────────
+    # deifne the probability columns
     PROB_COLS = ["prob_0", "prob_1", "prob_2", "prob_3"]
     has_probs = (
         hybrid_row is not None
         and all(c in hybrid_output.columns for c in PROB_COLS)
     )
 
-    # ── KMeans cluster stats (for Strategy 1) ────────────────────────────────
+    #load these kmeans stats required for clustering
     kmeans_stats = profiles_mean[profiles_mean["cluster"] == cluster_id].iloc[0].to_dict()
 
-    # ── Hybrid blend data (for Strategy 2) ───────────────────────────────────
+    #hybrid startergy for tab 2
     if has_probs:
         raw_probs = [float(hybrid_row[c]) for c in PROB_COLS]
         # Keep only clusters with >5% weight to avoid noise
@@ -154,11 +150,11 @@ with tab1:
         cluster_probs = [(cluster_id, 1.0)]
         cluster_stats_map = {cluster_id: kmeans_stats}
 
-    # ── Generate both AI strategies ───────────────────────────────────────────
+    # generate AI startergies for both tabs
     rec_kmeans = get_ai_recommendation(cluster_id, kmeans_stats,product_desc)
     rec_hybrid = get_ai_recommendation_hybrid(cluster_probs, cluster_stats_map,product_desc,CLUSTER_LABELS)
 
-    # ── Terminal debug prints ─────────────────────────────────────────────────
+   
     kmeans_label = get_cluster_recommendation(cluster_id).get("cluster_name", f"Cluster {cluster_id}")
     print(f"\n{'='*60}")
     print(f"POSTCODE: {pc}  |  OA: {oa_code}")
@@ -176,9 +172,7 @@ with tab1:
         print("  (no hybrid probabilities available)")
     print(f"{'='*60}\n")
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # AI Marketing Strategies — full width, two sub-tabs
-    # ═════════════════════════════════════════════════════════════════════════
+    #print the marketing stratregies of the AI reccomendation
     st.subheader("Marketing Strategies")
 
     icon_map = {
@@ -191,7 +185,7 @@ with tab1:
 
     strat_tabs = st.tabs([f"📍 Strategy 1 — {kmeans_label}", "🔀 Strategy 2 — Hybrid Blend"])
 
-    # ── Strategy 1: KMeans prediction ────────────────────────────────────────
+    #Strategy 1: KMeans 
     with strat_tabs[0]:
         st.caption(
             f"Based on the *KMeans* predicted cluster for this postcode: "
@@ -216,7 +210,7 @@ with tab1:
         for point in rec_kmeans.get("messaging_strategy", []):
             st.markdown(f"- {point}")
 
-    # ── Strategy 2: Hybrid blend ──────────────────────────────────────────────
+    # Stratergy2 : Hybrid
     with strat_tabs[1]:
         if has_probs:
             mix_str = ", ".join(
@@ -250,7 +244,7 @@ with tab1:
         for point in rec_hybrid.get("messaging_strategy", []):
             st.markdown(f"- {point}")
 
-    # ── Key local insights ────────────────────────────────────────────────────
+   
     st.divider()
     mean_row = profiles_mean[profiles_mean["cluster"] == cluster_id].iloc[0]
     delta_row = profiles_delta[profiles_delta["cluster"] == cluster_id].iloc[0]
@@ -277,7 +271,7 @@ with tab1:
         bar_val = min(abs(delta_val) / 50, 1.0)
         st.progress(bar_val, text=f"{friendly}: {delta_val:+.1f}% variance")
 
-# TAB 2 — Cluster Map
+# the clorpeth map
 with tab2:
     st.subheader("Geographic cluster visualisation")
     st.caption("All four clusters plotted simultaneously. Each colour represents a distinct demographic segment.")
