@@ -5,9 +5,7 @@ import json
 import streamlit as st
 from groq import Groq
 
-# ----------------------------
-# GROQ SETUP
-# ----------------------------
+#set up and load the groq api key
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 
@@ -34,9 +32,7 @@ def _safe_json_parse(text: str) -> Dict[str, Any] | None:
         return None
 
 
-# ============================================================
-# 🔵 REPLACED GEMINI VERSION (SAME FUNCTION NAME)
-# ============================================================
+#get the necessary ai reccomendation by passing the prompts for the kmeans 
 @st.cache_data(show_spinner=True)
 def get_ai_recommendation(cluster_id: int, cluster_stats: Dict[str, Any],product_desc: str) -> Dict[str, Any]:
 
@@ -112,9 +108,7 @@ Respond in EXACT format:
         }
 
 
-# ============================================================
-# 🟣 HYBRID FUNCTION (UNCHANGED NAME, GROQ BACKEND)
-# ============================================================
+# get the ai reccomendation for the hybrid model
 @st.cache_data(show_spinner=True)
 def get_ai_recommendation_hybrid(
     cluster_probs: List[Tuple[int, float]],
