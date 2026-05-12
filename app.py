@@ -382,20 +382,3 @@ with tab2:
             unsafe_allow_html=True,
         )
     st.divider()
-
-    # UMAP Visualisation 
-    # Shows cluster structure in 2D feature space. Well-separated clouds
-    # of points confirm the clusters are genuinely distinct in the data.
-    # Inside Tab 1 code:
-    st.subheader(" Geographic & Demographic Landscape")
-    st.caption("This map visualizes how different postcodes relate to each other. Areas closer together have similar demographic profiles.")
-
-    # Display ONLY the Hybrid UMAP
-    hybrid_umap = umaps["Hybrid"]
-    fig = px.scatter(
-        hybrid_umap, x="umap_x", y="umap_y", color="cluster",
-        color_discrete_map=CLUSTER_COLOURS,
-        title="UK Demographic Clusters (Hybrid GMM Projection)"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
