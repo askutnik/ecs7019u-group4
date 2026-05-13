@@ -48,7 +48,7 @@ https://console.groq.com/
 ### Step 2: Add to Streamlit/secret.toml
 
 ### GROQ_API_KEY = "your_api_key_here"
-### the application wont run without the API key
+### Application won't run without the API key
 ---
 ## Installation
 ### dependencies need to be installed manually:
@@ -56,9 +56,10 @@ pip install pandas numpy scikit-learn streamlit plotly joblib groq
 ---
 ## Dataset setup
 
-before running any commands ensure the file notebooks/processed/features_by_oa.csv exists if not you can download it from 
+Before running any commands ensure the file notebooks/processed/features_by_oa.csv exists if not you can download it from 
 https://drive.google.com/file/d/14Z9nwQdCYclowMATAxulcI90y69wvarn/view?usp=drivesdk 
 and upload in notebooks/processed/
+
 ---
 ## Model training pipeline
 the clustering models must be trained before running the pipeline as follows;
@@ -69,10 +70,10 @@ the clustering models must be trained before running the pipeline as follows;
 ## After the training is complete launch the streamlit app by:
 streamlit run app.py
 ---
-## You can:
-1. Enter the postcode
-2. Enter the product description
-3. View AI generated marejting stratergies and communication channels based on the cluster information pased to it as prompts.
+## How to use:
+1. Enter postcode for targeted location
+2. Enter product description
+3. View AI-generated marketing strategies and communication channels based on the cluster information passed to it as prompts.
 ---
 ## Authors/Group Members
 This project was developed as group effort by:
