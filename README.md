@@ -47,11 +47,12 @@ https://console.groq.com/
 
 ### Step 2: Add to Streamlit/secret.toml
 
-### GROQ_API_KEY = "your_api_key_here"
-### Application won't run without the API key
+GROQ_API_KEY = "your_api_key_here"
+Application won't run without the API key
+
 ---
 ## Installation
-### dependencies need to be installed manually:
+### Dependencies need to be installed manually:
 pip install pandas numpy scikit-learn streamlit plotly joblib groq
 ---
 ## Dataset setup
@@ -62,7 +63,7 @@ and upload in notebooks/processed/
 
 ---
 ## Model training pipeline
-the clustering models must be trained before running the pipeline as follows;
+The clustering models must be trained before running the pipeline as follows;
 1. python scripts/train_kmeans.py --kmin 2 --kmax 15 --k 4
 2. python scripts/train_gmm.py --kmin 2 --kmax 15 --k 4
 3. python scripts/train_hybrid.py
