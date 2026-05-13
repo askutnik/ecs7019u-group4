@@ -52,7 +52,7 @@ https://console.groq.com/
 ---
 ## Installation
 ### dependencies need to be installed manually:
-### pip install pandas numpy scikit-learn streamlit plotly joblib groq
+pip install pandas numpy scikit-learn streamlit plotly joblib groq
 ---
 ## Dataset setup
 
