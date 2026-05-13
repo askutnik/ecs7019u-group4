@@ -51,8 +51,8 @@ https://console.groq.com/
 ### the application wont run without the API key
 ---
 ## Installation
-dependencies need to be installed manually:
-###pip install pandas numpy scikit-learn streamlit plotly joblib groq
+### dependencies need to be installed manually:
+### pip install pandas numpy scikit-learn streamlit plotly joblib groq
 ---
 ## Dataset setup
 
